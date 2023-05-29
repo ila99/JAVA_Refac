@@ -8,24 +8,24 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class Main {
-    private static Map<String, Play> plays;
-
-    private static enum DataType {CUSTOMER, PERFORMANCES, TOTAL_AMOUNT, TOTAL_VOLUME_CREDITS};
+    private static Statement statement;
     public static void main(String[]args) {
         ObjectMapper objectMapper = new ObjectMapper();
         List<Invoice> invoices;
-        //Map<String, Play> plays;  // 불변한 정적 맵으로 변경
+
+        Map<String, Play> plays;  // 불변한 정적 맵으로 변경
 
         try {
             invoices    = initializeInvoiceList(objectMapper);
             plays       = initializePlayMap(objectMapper);
+            statement   = new Statement(plays);
         } catch (IOException e) {
             System.out.println("[ERROR] IOException: " + e.getMessage());
             return;
         }
 
         for (Invoice invoice : invoices) {
-            System.out.println(statement(invoice));
+            System.out.println(htmlStatement(invoice));
         }
     }
 
@@ -42,36 +42,8 @@ public class Main {
      * @param invoice, plays
      * @return
      */
-    public static String statement(Invoice invoice) {   // 매개변수 삭제
-        return renderPlainText(createStatementData(invoice));
-    }
-
-    /**
-     * 중간 데이터 저장 객체 생성
-     */
-    private static Map<DataType, Object> createStatementData(Invoice invoice) {
-        Map<DataType, Object> statementData = new HashMap<DataType, Object>();  // 중간 구조 데이터 객체
-        statementData.put(DataType.CUSTOMER, invoice.getCustomer());    // 고객 데이터를 중간 데이터로 옮김
-        statementData.put(DataType.PERFORMANCES, (invoice.getPerformances()).stream().map(Main::enrichPerformance).collect(Collectors.toList()));  // 공연 정보를 중간 데이터로 옮김
-        statementData.put(DataType.TOTAL_AMOUNT, totalAmount(statementData));
-        statementData.put(DataType.TOTAL_VOLUME_CREDITS, totalVolumeCredits(statementData));
-        return statementData;
-    }
-
-    /**
-     * Performance deep copy
-     * @param aPerformance
-     * @return
-     */
-    private static Performance enrichPerformance(Performance aPerformance) {
-        Performance result = new Performance();
-        result.setPlayID(aPerformance.getPlayID());
-        result.setAudience(aPerformance.getAudience());
-        result.setPlay(playFor(result));
-        result.setAmount(amountFor(result));
-        result.setVolumeCredits(volumeCreditFor(result));
-
-        return result;
+    public static String htmlStatement(Invoice invoice) {   // 매개변수 삭제
+        return renderHtml(statement.createStatementData(invoice));
     }
 
     /**
@@ -94,21 +66,27 @@ public class Main {
         return result.toString();
     }
 
-    private static long totalAmount(Map<DataType, Object> data) {
-        return ((List<Performance>)data.get(DataType.PERFORMANCES))
-                .stream()
-                .mapToLong(ob -> (ob.getAmount() + ob.getAmount()))
-                .reduce(0, Long::sum);
-    }
-
-    // 값 누적 로직 분리 --> 만약 반복 횟수가 성능에 영향을 끼칠 정도이면 분리할 지 말 지는 상황에 맞게 고려해야 함
-    private static long totalVolumeCredits(Map<DataType, Object> data) {
-        long volumeCredits = 0;            // 문장 슬라이드 - 변수 초기화 문장을 for 문 앞으로
-        // 반복문 쪼개기
+    /**
+     * 2023-05-29: 단위 쪼개기, 함수 추출하기
+     * @param data
+     * @return
+     */
+    private static String renderHtml(Map<DataType, Object> data) {
+        StringBuffer result = new StringBuffer("<h1>청구 내역 (고객명: \"");
+        result.append((String)data.get(DataType.CUSTOMER)).append("\"</h1>\n");  // 고객 데이터를 중간 데이터로부터 얻음
+        result.append("<table>\n");
+        result.append("<tr><th>연극</th><th>좌석 수</th><th>금액</th></tr>\n");
         for (Performance perf : (List<Performance>)data.get(DataType.PERFORMANCES)) {
-            volumeCredits += perf.getVolumeCredits();     // 함수 추출
+            // 청구 내역을 출력한다.
+            result.append("   <tr><td>").append(perf.getPlay().getName()).append("</td>");
+            result.append("<td>(").append(perf.getAudience()).append("석)</td>");
+            result.append("<td>").append(usd(perf.getAmount())).append("</td></tr>\n");  // 인라인
         }
-        return volumeCredits;
+        result.append("</table>\n");
+        result.append("<p>총액: <em>").append(usd((long)data.get(DataType.TOTAL_AMOUNT))).append("</em></p>\n");
+        result.append("<p>적립 포인트: <em>").append((long)data.get(DataType.TOTAL_VOLUME_CREDITS)).append("</em>점</p>\n");        // 인라인
+
+        return result.toString();
     }
 
     // usb로 변환
@@ -117,40 +95,4 @@ public class Main {
         numFormat.setMinimumFractionDigits(2);
         return numFormat.format(aNumber/100);
     }
-
-    private static long volumeCreditFor(Performance aPerformance) {
-        long result = 0;
-
-        // 포인트를 적립한다.
-        result += Math.max(aPerformance.getAudience() - 30, 0);
-        // 희극 관객 5명마다 추가 포인트를 제공한다.
-        if (aPerformance.getPlay().getType().equals("comedy")) result += Math.floor(aPerformance.getAudience() / 5);   // 인라인
-        return result;
-    }
-    private static Play playFor(Performance aPerformance) {
-        return plays.get(aPerformance.getPlayID());
-    }
-
-    private static long amountFor(Performance aPerformance) {    // 매개변수 삭제
-        long result = 0;
-        switch (aPerformance.getPlay().getType()) {      // 인라인
-            case "tragedy": // 비극
-                result = 40000;
-                if(aPerformance.getAudience() > 30) {
-                    result += 1000 * (aPerformance.getAudience() - 30);
-                }
-                break;
-            case "comedy": // 희극
-                result = 30000;
-                if(aPerformance.getAudience() > 20) {
-                    result += 10000 + 500 * (aPerformance.getAudience() - 20);
-                }
-                result += 300 * aPerformance.getAudience();
-                break;
-            default:
-                throw new Error(String.format("알 수 없는 장르: %s", aPerformance.getPlay().getType()));
-        }
-        return result;
-    }
-
 }
