@@ -28,12 +28,14 @@ public class Statement {
      * @return
      */
     private Performance enrichPerformance(Performance aPerformance) {
+        PerformanceCalculator performanceCalculator = createPerformanceCalculator(aPerformance, playFor(aPerformance));
+        // 공연 정보 계산기 추가
         Performance result = new Performance();
         result.setPlayID(aPerformance.getPlayID());
         result.setAudience(aPerformance.getAudience());
-        result.setPlay(playFor(result));
-        result.setAmount(amountFor(result));
-        result.setVolumeCredits(volumeCreditFor(result));
+        result.setPlay(performanceCalculator.getPlay());
+        result.setAmount(performanceCalculator.getAmount());
+        result.setVolumeCredits(performanceCalculator.getVolumeCredit());
 
         return result;
     }
@@ -42,39 +44,15 @@ public class Statement {
         return plays.get(aPerformance.getPlayID());
     }
 
-    private long amountFor(Performance aPerformance) {    // 매개변수 삭제
-        long result = 0;
-        switch (aPerformance.getPlay().getType()) {      // 인라인
-            case "tragedy": // 비극
-                result = 40000;
-                if(aPerformance.getAudience() > 30) {
-                    result += 1000 * (aPerformance.getAudience() - 30);
-                }
-                break;
-            case "comedy": // 희극
-                result = 30000;
-                if(aPerformance.getAudience() > 20) {
-                    result += 10000 + 500 * (aPerformance.getAudience() - 20);
-                }
-                result += 300 * aPerformance.getAudience();
-                break;
-            default:
-                throw new Error(String.format("알 수 없는 장르: %s", aPerformance.getPlay().getType()));
-        }
-        return result;
-    }
-
     private long volumeCreditFor(Performance aPerformance) {
-        long result = 0;
-
-        // 포인트를 적립한다.
-        result += Math.max(aPerformance.getAudience() - 30, 0);
-        // 희극 관객 5명마다 추가 포인트를 제공한다.
-        if (aPerformance.getPlay().getType().equals("comedy")) result += Math.floor(aPerformance.getAudience() / 5);   // 인라인
-        return result;
+        return createPerformanceCalculator(aPerformance, playFor(aPerformance)).getVolumeCredit();
     }
 
-    private static long totalAmount(Map<DataType, Object> data) {
+    private long amountFor(Performance aPerformance) {
+        return createPerformanceCalculator(aPerformance, playFor(aPerformance)).getAmount();
+    }
+
+    private long totalAmount(Map<DataType, Object> data) {
         return ((List<Performance>)data.get(DataType.PERFORMANCES))
                 .stream()
                 .mapToLong(ob -> (ob.getAmount() + ob.getAmount()))
@@ -82,7 +60,7 @@ public class Statement {
     }
 
     // 값 누적 로직 분리 --> 만약 반복 횟수가 성능에 영향을 끼칠 정도이면 분리할 지 말 지는 상황에 맞게 고려해야 함
-    private static long totalVolumeCredits(Map<DataType, Object> data) {
+    private long totalVolumeCredits(Map<DataType, Object> data) {
         long volumeCredits = 0;            // 문장 슬라이드 - 변수 초기화 문장을 for 문 앞으로
         // 반복문 쪼개기
         for (Performance perf : (List<Performance>)data.get(DataType.PERFORMANCES)) {
@@ -90,4 +68,17 @@ public class Statement {
         }
         return volumeCredits;
     }
+
+    private PerformanceCalculator createPerformanceCalculator(Performance aPerformance, Play aPlay) {
+        if (aPlay.getType().equals(PlayType.TRAGEDY.getValue())) {
+            return new TragedyCalculator(aPerformance, playFor(aPerformance));
+        }
+        else if (aPlay.getType().equals(PlayType.COMEDY.getValue())) {
+            return new ComedyCalculator(aPerformance, playFor(aPerformance));
+        }
+        else {
+            throw new Error(String.format("알 수 없는 장르: %s", aPerformance.getPlay().getType()));
+        }
+    }
+
 }
