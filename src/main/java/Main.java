@@ -1,5 +1,5 @@
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +29,8 @@ public class Main {
         for (Invoice invoice : invoices) {
             System.out.println(htmlStatement(invoice));
         }
+
+        printOutsideRange();
     }
 
     private static Map<String, Play> initializePlayMap(ObjectMapper objectMapper) throws IOException {
@@ -91,6 +93,13 @@ public class Main {
         return result.toString();
     }
 
+    // usb로 변환
+    private static String usd(long aNumber) {
+        NumberFormat numFormat = NumberFormat.getCurrencyInstance(new Locale("en", "US"));
+        numFormat.setMinimumFractionDigits(2);
+        return numFormat.format(aNumber/100);
+    }
+
     private static void printOwing(Invoice invoice) {
 
         // 배너 출력 로직을 함수로 추출
@@ -151,10 +160,57 @@ public class Main {
         System.out.println("***********************");
     }
 
-    // usb로 변환
-    private static String usd(long aNumber) {
-        NumberFormat numFormat = NumberFormat.getCurrencyInstance(new Locale("en", "US"));
-        numFormat.setMinimumFractionDigits(2);
-        return numFormat.format(aNumber/100);
+    private int rating(Driver aDriver) {
+        // 함수 인라인 -> 판별 로직을 함수로 분리하지 않고 처리함
+        return aDriver.getNumberOfLateDeliveries() > 5 ? 2 : 1;
+    }
+
+    /**
+     *  6.8 매개변수 객체 만들기
+     * @link http://iloveulhj.github.io/posts/java/java-stream-api.html
+     * @link https://codechacha.com/ko/java8-method-reference/
+     */
+    private static void printOutsideRange() {
+        List<Map<String, String>> result = readingsOutsideRange(testData(), new NumberRange(40, 60));
+
+        result.forEach(System.out::println);
+    }
+    private static List<Map<String, String>> testData() {
+        List<Map<String, String>> listMap = new ArrayList<Map<String, String>>();
+        listMap.add(new HashMap<String, String>() {{
+            put("temp", "47");
+            put("time", "2016-11-10 09:10");
+        }});
+        listMap.add(new HashMap<String, String>() {{
+            put("temp", "53");
+            put("time", "2016-11-10 09:20");
+        }});
+        listMap.add(new HashMap<String, String>() {{
+            put("temp", "58");
+            put("time", "2016-11-10 09:30");
+        }});
+        listMap.add(new HashMap<String, String>() {{
+            put("temp", "53");
+            put("time", "2016-11-10 09:40");
+        }});
+        listMap.add(new HashMap<String, String>() {{
+            put("temp", "61");
+            put("time", "2016-11-10 09:50");
+        }});
+        return listMap;
+    }
+
+    /**
+     * 정상 범위를 벗어난 측정값을 가진 데이터만 찾아서 리턴
+     * @param station
+     * @param range
+     * @return
+     */
+    private static List<Map<String, String>> readingsOutsideRange(List<Map<String, String>> station, NumberRange range) {
+        return station.stream().filter(r -> {
+                    int value = Integer.valueOf(r.getOrDefault("temp", "0"));
+
+                    return value < range.getMin() || value > range.getMax();
+                } ).collect(Collectors.toList());
     }
 }

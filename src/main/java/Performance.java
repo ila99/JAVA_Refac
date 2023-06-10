@@ -5,7 +5,6 @@ public class Performance {
 
     private long amount;
 
-
     private long volumeCredits;
 
     public String getPlayID() {
