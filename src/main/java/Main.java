@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import java.io.File;
 import java.io.IOException;
 import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -87,6 +89,66 @@ public class Main {
         result.append("<p>적립 포인트: <em>").append((long)data.get(DataType.TOTAL_VOLUME_CREDITS)).append("</em>점</p>\n");        // 인라인
 
         return result.toString();
+    }
+
+    private static void printOwing(Invoice invoice) {
+
+        // 배너 출력 로직을 함수로 추출
+        printBanner();
+
+        long outstanding = calculateOutstanding(invoice);
+
+        // 마감일(dueDate)을 기록하는 로직을 함수로 추출
+        recordDueDate(invoice);
+
+        // 세부 사항 출력 로직을 함수로 추출
+        printDetails(invoice, outstanding);
+    }
+
+    /**
+     * 미해결 채무 계산
+     * @param invoice
+     * @return
+     */
+    private static long calculateOutstanding(Invoice invoice) {
+        long result = 0;       // 코드 슬라이딩-> 변수 선언을 해당 변수를 사용하는 로직 근처로 위치함
+                                // 변수 이름 변경 (outstanding --> result)
+        // 미해결 채무(outstanding)를 계산
+        for (Order order : invoice.getOrders()) {
+            result += order.getAmount();
+        }
+        return result;
+    }
+
+    /**
+     * 마감일 설정
+     * @param invoice
+     */
+    private static void recordDueDate(Invoice invoice) {
+        LocalDate today = LocalDate.now();
+        LocalDate targetDate = LocalDate.of(today.getYear(),today.getMonth(),today.getDayOfMonth()+30);
+        invoice.setDueDate(targetDate);
+    }
+
+    /**
+     * 세부 사항 출력
+     * @param invoice
+     * @param outstanding
+     */
+    private static void printDetails(Invoice invoice, long outstanding) {
+        System.out.println(String.format("고객명: %s", invoice.getCustomer()));
+        System.out.println(String.format("채무액: %d", outstanding));
+        System.out.println(String.format("마감일: %s",
+                invoice.getDueDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+    }
+
+    /**
+     * 배너를 출력함
+     */
+    private static void printBanner() {
+        System.out.println("***********************");
+        System.out.println("******* 고객 채무 ******");
+        System.out.println("***********************");
     }
 
     // usb로 변환
