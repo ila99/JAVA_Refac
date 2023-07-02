@@ -213,4 +213,26 @@ public class Main {
                     return value < range.getMin() || value > range.getMax();
                 } ).collect(Collectors.toList());
     }
+
+    // 단위 쪼개기
+    /**
+     * 배송비 계산
+     */
+    private int priceOrder(Product product, int quantity, ShippingMethod shippingMethod) {
+        int basePrice = product.getBasePrice() * quantity;
+        int discount = Math.max(quantity - product.getDiscountThreshold(), 0)
+                    * product.getBasePrice() * product.getDiscountRate();
+        int price = applyShipping(basePrice, shippingMethod, quantity, discount);
+
+        return price;
+    }
+
+    private int applyShipping(int basePrice, ShippingMethod shippingMethod, int quantity, int discount) {
+        int shippingPerCase = (basePrice > shippingMethod.getDiscountThreshold()) ?
+                shippingMethod.getDiscountFee() : shippingMethod.getFeePerCase();
+        int shippingCost = quantity * shippingPerCase;
+        int price = basePrice - discount + shippingCost;
+
+        return price;
+    }
 }
